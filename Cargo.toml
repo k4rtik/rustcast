@@ -1,0 +1,22 @@
+[package]
+name = "snowcast"
+version = "0.1.0"
+authors = ["Kartik Singhal <kartiksinghal@gmail.com>"]
+
+[dependencies]
+byteorder = "0.5.3"
+env_logger = "0.3.5"
+mio = "0.6.0"
+
+[[bin]]
+name = "snowcast_server"
+path = "src/server.rs"
+
+[[bin]]
+name = "snowcast_listener"
+path = "src/udp_client.rs"
+
+[[bin]]
+name = "snowcast_control"
+path = "src/tcp_client.rs"
+
