@@ -4,7 +4,10 @@ extern crate clap;
 extern crate log;
 extern crate env_logger;
 
+mod commands;
+
 use clap::{App, Arg};
+use commands::*;
 
 fn main() {
     env_logger::init().ok().expect("Failed to initialize logger");
