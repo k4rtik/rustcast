@@ -1,8 +1,14 @@
 extern crate clap;
 
+#[macro_use]
+extern crate log;
+extern crate env_logger;
+
 use clap::{App, Arg};
 
 fn main() {
+    env_logger::init().ok().expect("Failed to initialize logger");
+
     App::new("snowcast_control")
         .version("0.1.0")
         .arg(Arg::with_name("servername")
