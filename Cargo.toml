@@ -4,10 +4,10 @@ version = "0.1.0"
 authors = ["Kartik Singhal <kartiksinghal@gmail.com>"]
 
 [dependencies]
-byteorder = "0.5.3"
-env_logger = "0.3.5"
-log = "0.3.6"
-mio = "0.6.0"
+byteorder = "0.5"
+env_logger = "0.3"
+log = "0.3"
+mio = "0.6"
 
 [dependencies.clap]
 version = "2"
