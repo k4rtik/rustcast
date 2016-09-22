@@ -79,7 +79,7 @@ fn main() {
                         let stationres = x.parse::<u16>();
                         let station = match stationres {
                             Ok(num) => num,
-                            Err(e) => {
+                            Err(_) => {
                                 println!("Invalid input: number or 'q' expected");
                                 continue;
                             }
@@ -137,8 +137,6 @@ fn main() {
                             }
 
                         };
-
-                        let mut commandbuf = [0u8; 2 + 255]; // size chosen to support maximum string len
                     }
                 }
             }
