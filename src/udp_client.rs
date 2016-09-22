@@ -22,7 +22,7 @@ fn main() {
     let port = matches.value_of("udpport").unwrap().parse::<u16>().unwrap();
     info!("udpport: {}", port);
 
-    let socket = UdpSocket::bind(("127.0.0.1", port)).unwrap();
+    let socket = UdpSocket::bind(("0.0.0.0", port)).unwrap();
 
     loop {
         // TODO find out optimal buffer window to read
