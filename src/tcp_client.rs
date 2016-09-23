@@ -1,5 +1,6 @@
 extern crate byteorder;
 extern crate clap;
+extern crate mio;
 
 #[macro_use]
 extern crate log;
@@ -10,10 +11,14 @@ mod commands;
 use byteorder::{ByteOrder, BigEndian};
 use clap::{App, Arg};
 use commands::*;
+use mio::*;
+use mio::tcp::TcpStream;
 use std::io;
 use std::io::prelude::*;
-use std::net::TcpStream;
+use std::os::unix::io::FromRawFd;
 
+const CONTROL: Token = Token(0);
+const CLIENT: Token = Token(1);
 
 fn main() {
     env_logger::init().ok().expect("Failed to initialize logger");
@@ -33,12 +38,34 @@ fn main() {
 
     let servername = matches.value_of("servername").unwrap();
     debug!("server: {}", servername);
-    let serverport = matches.value_of("serverport").unwrap().parse::<u16>().unwrap();
+    let serverport = matches.value_of("serverport").unwrap(); // .parse::<u16>().unwrap();
     debug!("server port: {}", serverport);
     let udpport = matches.value_of("udpport").unwrap().parse::<u16>().unwrap();
     debug!("udp port: {}", udpport);
 
-    let mut stream = TcpStream::connect((servername, serverport)).unwrap();
+    let addr_string = servername.to_string() + ":" + serverport;
+    let addr = addr_string.parse().unwrap();
+    let sock = TcpStream::connect(&addr).unwrap();
+
+    let mut poll = Poll::new().unwrap();
+    poll.register(&sock, CLIENT, Ready::readable(), PollOpt::edge()).unwrap();
+
+    let control = unsafe { std::os::unix::io::from_raw_fd(0) };
+    poll.register(&control, CONTROL, Ready::readable(), PollOpt::edge()).unwrap();
+
+    let mut events = Events::with_capacity(1024);
+
+    loop {
+        poll.poll(&mut events, None).unwrap();
+
+        for event in events.iter() {
+            match event.token() {
+                CONTROL => {}
+                CLIENT => {}
+                _ => unreachable!(),
+            }
+        }
+    }
 
     let mut hellobuf = [0u8; 3];
     let hello = Hello {
@@ -62,6 +89,7 @@ fn main() {
     println!("Enter q or press CTRL+C to quit.");
     println!("> The server has {} stations.", welcome.num_stations);
 
+    poll.register(&stream, CLIENT, Ready::all(), PollOpt::edge()).unwrap();
     loop {
         print!("> ");
         io::stdout().flush().unwrap();
