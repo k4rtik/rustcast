@@ -26,7 +26,7 @@ fn main() {
 
     loop {
         // TODO find out optimal buffer window to read
-        let mut buf = [0u8; 2048];
+        let mut buf = [0u8; 1400];
         let (amt, _) = socket.recv_from(&mut buf).unwrap();
         // TODO do I need a timeout here?
 
