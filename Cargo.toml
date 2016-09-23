@@ -8,6 +8,7 @@ byteorder = "0.5"
 env_logger = "0.3"
 log = "0.3"
 mio = "0.6"
+slab = "0.3"
 
 [dependencies.clap]
 version = "2"
@@ -15,7 +16,7 @@ default-features = false
 
 [[bin]]
 name = "snowcast_server"
-path = "src/server.rs"
+path = "src/main.rs"
 
 [[bin]]
 name = "snowcast_listener"
@@ -24,4 +25,3 @@ path = "src/udp_client.rs"
 [[bin]]
 name = "snowcast_control"
 path = "src/tcp_client.rs"
-
