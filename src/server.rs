@@ -233,7 +233,7 @@ impl Server {
         }
     }
 
-    fn disconnect_with_invalid_command(&mut self, token: Token, reply: &str) -> io::Result<()> {
+    fn disconnect_with_invalid_command(&mut self, token: Token, reply: &str) {
         let reply_string = reply.to_string();
         let reply_string_size = reply_string.len();
         let mut invalidbuf: Vec<u8> = vec![0; 2];
@@ -248,7 +248,6 @@ impl Server {
             .send_message(Rc::new(invalidbuf.to_vec()))
             .ok();
         self.find_connection_by_token(token).mark_to_be_removed();
-        Ok(())
     }
 
     /// Forward a readable event to an established connection.
