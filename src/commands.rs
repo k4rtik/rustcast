@@ -5,6 +5,7 @@ pub enum ServerCommand {
         command_type: u8,
         station_number: u16,
     },
+    Invalid { command_type: u8, unused: u16 },
 }
 
 // Server to Client Replies

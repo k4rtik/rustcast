@@ -32,6 +32,8 @@ pub struct Connection {
     is_reset: bool,
 
     is_to_be_removed: bool,
+
+    handshake_done: bool,
 }
 
 impl Connection {
@@ -44,6 +46,7 @@ impl Connection {
             is_idle: true,
             is_reset: false,
             is_to_be_removed: false,
+            handshake_done: false,
         }
     }
 
@@ -54,10 +57,10 @@ impl Connection {
     /// The receive buffer is sent back to `Server` so the message can be broadcast to all
     /// listening connections.
     pub fn readable(&mut self) -> io::Result<Option<ServerCommand>> {
-        self.read_message()
+        self.read_command()
     }
 
-    fn read_message(&mut self) -> io::Result<Option<ServerCommand>> {
+    fn read_command(&mut self) -> io::Result<Option<ServerCommand>> {
         let mut buf = [0u8; 3];
 
         let bytes = match self.sock.read(&mut buf) {
@@ -91,7 +94,12 @@ impl Connection {
                     station_number: command_value,
                 }
             }
-            _ => unreachable!("InvalidCommand"), // TODO deal with it
+            _ => {
+                ServerCommand::Invalid {
+                    command_type: 99,
+                    unused: 99,
+                }
+            }
         };
 
         Ok(Some(command))
@@ -230,5 +238,16 @@ impl Connection {
     #[inline]
     pub fn is_to_be_removed(&self) -> bool {
         self.is_to_be_removed
+    }
+
+    pub fn mark_handshake_done(&mut self) {
+        trace!("connection handshake_done; token={:?}", self.token);
+
+        self.handshake_done = true;
+    }
+
+    #[inline]
+    pub fn is_handshake_done(&self) -> bool {
+        self.handshake_done
     }
 }

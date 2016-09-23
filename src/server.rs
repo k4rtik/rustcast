@@ -133,7 +133,7 @@ impl Server {
         if event.is_hup() {
             trace!("Hup event for {:?}", token);
             self.find_connection_by_token(token).mark_reset();
-            println!("session id {:?}: client closed connection", token);
+            println!("{:?}: client closed connection", token);
             return;
         }
 
@@ -220,8 +220,7 @@ impl Server {
 
             match self.find_connection_by_token(token).register(poll) {
                 Ok(_) => {
-                    println!("session id {:?}: new client connected; expecting HELLO",
-                             token);
+                    println!("{:?}: new client connected; expecting HELLO", token);
                 }
                 Err(e) => {
                     error!("Failed to register {:?} connection with poller, {:?}",
@@ -233,6 +232,24 @@ impl Server {
         }
     }
 
+    fn disconnect_with_invalid_command(&mut self, token: Token, reply: &str) -> io::Result<()> {
+        let reply_string = reply.to_string();
+        let reply_string_size = reply_string.len();
+        let mut invalidbuf: Vec<u8> = vec![0; 2];
+        unsafe {
+            invalidbuf.set_len(2);
+        }
+        invalidbuf[0] = 2; // reply_type
+        invalidbuf[1] = reply_string_size as u8;
+        let mut reply_string_vec = reply_string.into_bytes();
+        invalidbuf.append(&mut reply_string_vec);
+        self.find_connection_by_token(token)
+            .send_message(Rc::new(invalidbuf.to_vec()))
+            .ok();
+        self.find_connection_by_token(token).mark_to_be_removed();
+        Ok(())
+    }
+
     /// Forward a readable event to an established connection.
     ///
     /// Connections are identified by the token provided to us from the poller. Once a read has
@@ -241,54 +258,47 @@ impl Server {
     fn readable(&mut self, token: Token) -> io::Result<()> {
         debug!("server conn readable; token={:?}", token);
 
-        // let rc_message = Rc::new::<Vec<u8>();
         while let Some(command) = try!(self.find_connection_by_token(token).readable()) {
             match command {
                 ServerCommand::Hello { udp_port, .. } => {
                     info!("udp_port: {}", udp_port);
-                    // TODO setup server to broadcast at udp_port
-                    println!("session id {:?}: HELLO received; sending WELCOME, expecting \
-                              SET_STATION",
-                             token);
-                    let mut welcomebuf: Vec<u8> = vec![0; 3];
-                    unsafe {
-                        welcomebuf.set_len(3);
+                    if self.find_connection_by_token(token).is_handshake_done() {
+                        println!("{:?}: re-received HELLO, sending INVALID_COMMAND; closing \
+                                  connection",
+                                 token);
+                        self.disconnect_with_invalid_command(token,
+                                                             "Handshake already done but server \
+                                                              re-received HELLO");
+                    } else {
+                        // TODO setup server to broadcast at udp_port
+                        println!("{:?}: HELLO received; sending WELCOME, expecting SET_STATION",
+                                 token);
+                        let mut welcomebuf: Vec<u8> = vec![0; 3];
+                        unsafe {
+                            welcomebuf.set_len(3);
+                        }
+                        debug!("Station Count: {}", self.stations.len());
+                        BigEndian::write_u16(&mut welcomebuf[1..], self.stations.len() as u16);
+                        debug!("{:?}", welcomebuf);
+                        self.find_connection_by_token(token)
+                            .send_message(Rc::new(welcomebuf.to_vec()))
+                            .ok();
+                        self.find_connection_by_token(token).mark_handshake_done();
                     }
-                    debug!("Station Count: {}", self.stations.len());
-                    BigEndian::write_u16(&mut welcomebuf[1..], self.stations.len() as u16);
-                    debug!("{:?}", welcomebuf);
-                    self.find_connection_by_token(token)
-                        .send_message(Rc::new(welcomebuf.to_vec()))
-                        .ok();
                 }
                 ServerCommand::SetStation { station_number, .. } => {
                     let station_number = station_number as usize;
                     if station_number >= self.stations.len() {
-                        println!("session id {:?}: received request for invalid station: {}, \
+                        println!("{:?}: received request for invalid station: {}, \
                                   sending INVALID_COMMAND; closing connection",
                                  token,
                                  station_number);
-
-                        let reply_string = "INVALID_COMMAND_REPLY: server received a SET_STATION \
-                                            command with an invalid station number"
-                            .to_string();
-                        let reply_string_size = reply_string.len();
-                        let mut invalidbuf: Vec<u8> = vec![0; 2];
-                        unsafe {
-                            invalidbuf.set_len(2);
-                        }
-                        invalidbuf[0] = 2; // reply_type
-                        invalidbuf[1] = reply_string_size as u8;
-                        let mut reply_string_vec = reply_string.into_bytes();
-                        debug!("vec: {:?}", reply_string_vec);
-                        invalidbuf.append(&mut reply_string_vec);
-                        debug!("invalid: {:?}", invalidbuf);
-                        self.find_connection_by_token(token)
-                            .send_message(Rc::new(invalidbuf.to_vec()))
-                            .ok();
-                        self.find_connection_by_token(token).mark_to_be_removed();
+                        self.disconnect_with_invalid_command(token,
+                                                             "server received a SET_STATION \
+                                                              command with an invalid station \
+                                                              number");
                     } else {
-                        println!("session id {:?}: received SET_STATION to station {}",
+                        println!("{:?}: received SET_STATION to station {}",
                                  token,
                                  station_number);
                         let song_name_size = self.stations[station_number].len();
@@ -301,15 +311,20 @@ impl Server {
                         let song_name = self.stations[station_number].clone();
                         debug!("song_name: {:?}", song_name);
                         let mut song_name_vec = song_name.into_bytes();
-                        debug!("vec: {:?}", song_name_vec);
                         announcebuf.append(&mut song_name_vec);
-                        debug!("announce: {:?}", announcebuf);
                         self.find_connection_by_token(token)
                             .send_message(Rc::new(announcebuf.to_vec()))
                             .ok();
                         debug!("Sending songname: {}",
                                String::from_utf8(announcebuf[2..].to_vec()).unwrap());
                     }
+                }
+                _ => {
+                    println!("{:?}: received unknown command type, sending INVALID_COMMAND; \
+                              closing connection",
+                             token);
+                    self.disconnect_with_invalid_command(token,
+                                                         "server received an unknown command");
                 }
             }
         }
