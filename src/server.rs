@@ -133,6 +133,7 @@ impl Server {
         if event.is_hup() {
             trace!("Hup event for {:?}", token);
             self.find_connection_by_token(token).mark_reset();
+            println!("session id {:?}: client closed connection", token);
             return;
         }
 
