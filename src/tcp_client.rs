@@ -11,6 +11,9 @@ use std::io;
 use std::io::prelude::*;
 use std::net::TcpStream;
 use std::time::Duration;
+use std::sync::mpsc::{Sender, Receiver};
+use std::sync::mpsc;
+use std::thread;
 
 fn main() {
     env_logger::init().ok().expect("Failed to initialize logger");
@@ -53,6 +56,10 @@ fn main() {
     println!("Enter q or press CTRL+C to quit.");
     println!("> The server has {} stations.", num_stations);
 
+    let (tx, rx): (Sender<u16>, Receiver<u16>) = mpsc::channel();
+
+    thread::spawn(move || client_loop(stream, rx));
+
     loop {
         print!("> ");
         io::stdout().flush().unwrap();
@@ -75,55 +82,7 @@ fn main() {
                                 continue;
                             }
                         };
-
-                        let mut setstationbuf = [0u8; 3];
-                        setstationbuf[0] = 1;
-                        BigEndian::write_u16(&mut setstationbuf[1..], station);
-                        debug!("{:?}", setstationbuf);
-                        stream.write_all(setstationbuf.as_ref()).unwrap();
-
-                        println!("Waiting for an announce…");
-
-                        let mut reply_type_buf = [0u8; 1];
-                        stream.read_exact(&mut reply_type_buf).unwrap();
-                        info!("{}", reply_type_buf[0]);
-                        match reply_type_buf[0] {
-                            0 => {
-                                error!("Server resent Welcome");
-                                break;
-                            }
-                            1 => {
-                                debug!("Announce");
-                                let mut song_name_size = [0u8; 1];
-                                stream.read_exact(&mut song_name_size).unwrap();
-                                info!("{}", song_name_size[0]);
-                                let song_name_size = song_name_size[0] as usize;
-                                let mut song_name = vec![0u8; song_name_size];
-                                stream.read_exact(&mut song_name).unwrap();
-
-                                println!("New song announced: {}",
-                                         String::from_utf8(song_name).unwrap());
-                            }
-                            2 => {
-                                // client sent an InvalidCommand
-                                let mut reply_string_size = [0u8; 1];
-                                stream.read_exact(&mut reply_string_size).unwrap();
-                                info!("{}", reply_string_size[0]);
-                                let mut reply_string = String::new();
-                                assert_eq!(reply_string_size[0] as usize,
-                                           stream.read_to_string(&mut reply_string).unwrap());
-                                info!("{}", reply_string);
-
-                                println!("INVALID_COMMAND_REPLY: {}", reply_string);
-                                println!("Server has closed the connection.");
-                                break;
-                            }
-                            _ => {
-                                error!("Server sent an unknown response");
-                                break;
-                            }
-
-                        };
+                        tx.send(station);
                     }
                 }
             }
@@ -131,5 +90,74 @@ fn main() {
                 panic!("Unexpected error reading from stdin");
             }
         }
+    }
+}
+
+fn client_loop(mut stream: TcpStream, rx: Receiver<u16>) {
+    loop {
+        let station = match rx.try_recv() {
+            Ok(station) => station,
+            Err(mpsc::TryRecvError::Empty) => 65535,
+            Err(mpsc::TryRecvError::Disconnected) => return,
+        };
+
+        if station < 65535 {
+            let mut setstationbuf = [0u8; 3];
+            setstationbuf[0] = 1;
+            BigEndian::write_u16(&mut setstationbuf[1..], station);
+            debug!("{:?}", setstationbuf);
+            stream.write_all(setstationbuf.as_ref()).unwrap();
+
+            println!("Waiting for an announce…");
+        }
+
+        let mut reply_type_buf = [0u8; 1];
+
+        // poll server for change of song
+        match stream.read_exact(&mut reply_type_buf) {
+            Ok(_) => (),
+            Err(_) => continue,
+        }
+
+        info!("{}", reply_type_buf[0]);
+        match reply_type_buf[0] {
+            0 => {
+                error!("Server resent Welcome");
+                break;
+            }
+            1 => {
+                debug!("Announce");
+                let mut song_name_size = [0u8; 1];
+                stream.read_exact(&mut song_name_size).unwrap();
+                info!("{}", song_name_size[0]);
+                let song_name_size = song_name_size[0] as usize;
+                let mut song_name = vec![0u8; song_name_size];
+                stream.read_exact(&mut song_name).unwrap();
+
+                println!("New song announced: {}",
+                         String::from_utf8(song_name).unwrap());
+                print!("> ", );
+                io::stdout().flush().unwrap();
+            }
+            2 => {
+                // client sent an InvalidCommand
+                let mut reply_string_size = [0u8; 1];
+                stream.read_exact(&mut reply_string_size).unwrap();
+                info!("{}", reply_string_size[0]);
+                let mut reply_string = String::new();
+                assert_eq!(reply_string_size[0] as usize,
+                           stream.read_to_string(&mut reply_string).unwrap());
+                info!("{}", reply_string);
+
+                println!("INVALID_COMMAND_REPLY: {}", reply_string);
+                println!("Server has closed the connection.");
+                break;
+            }
+            _ => {
+                error!("Server sent an unknown response");
+                break;
+            }
+
+        };
     }
 }
