@@ -30,11 +30,13 @@ fn main() {
             .multiple(true))
         .get_matches();
 
-    if let Some(mp3s) = matches.values_of("file1") {
-        for mp3 in mp3s {
-            debug!("Received: {}", mp3);
+    let mut stations: Vec<String> = vec![];
+    if let Some(files) = matches.values_of("file1") {
+        for file in files {
+            stations.push(file.parse::<String>().unwrap());
         }
     }
+    debug!("{:?}", stations);
 
     let serverport = matches.value_of("tcpport").unwrap();
     debug!("server port: {}", serverport);
@@ -52,6 +54,6 @@ fn main() {
     // the details of how registering works inside of the `Server` object. One reason I
     // really like this is to get around having to have `const SERVER = Token(0)` at the top of my
     // file. It also keeps our polling options inside `Server`.
-    let mut server = Server::new(sock);
+    let mut server = Server::new(sock, stations);
     server.run(&mut poll).expect("Failed to run server");
 }

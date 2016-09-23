@@ -145,18 +145,6 @@ impl Connection {
             .pop()
             .ok_or(Error::new(ErrorKind::Other, "Could not pop send queue"))
             .and_then(|buf| {
-                match self.write_message_length(&buf) {
-                    Ok(None) => {
-                        // put message back into the queue so we can try again
-                        self.send_queue.push(buf);
-                        return Ok(());
-                    }
-                    Ok(Some(())) => (),
-                    Err(e) => {
-                        error!("Failed to send buffer for {:?}, error: {}", self.token, e);
-                        return Err(e);
-                    }
-                }
 
                 match self.sock.write(&*buf) {
                     Ok(n) => {

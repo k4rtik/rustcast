@@ -23,10 +23,13 @@ pub struct Server {
 
     // a list of events to process
     events: Events,
+
+    // available stations on this server
+    stations: Vec<String>,
 }
 
 impl Server {
-    pub fn new(sock: TcpListener) -> Server {
+    pub fn new(sock: TcpListener, stations: Vec<String>) -> Server {
         Server {
             sock: sock,
 
@@ -40,6 +43,9 @@ impl Server {
 
             // list of events from the poller that the server needs to process
             events: Events::with_capacity(1024),
+
+            // vector of available stations on this server
+            stations: stations,
         }
     }
 
@@ -212,7 +218,10 @@ impl Server {
             };
 
             match self.find_connection_by_token(token).register(poll) {
-                Ok(_) => {}
+                Ok(_) => {
+                    println!("session id {:?}: new client connected; expecting HELLO",
+                             token);
+                }
                 Err(e) => {
                     error!("Failed to register {:?} connection with poller, {:?}",
                            token,
@@ -231,16 +240,71 @@ impl Server {
     fn readable(&mut self, token: Token) -> io::Result<()> {
         debug!("server conn readable; token={:?}", token);
 
-        while let Some(message) = try!(self.find_connection_by_token(token).readable()) {
+        // let rc_message = Rc::new::<Vec<u8>();
+        while let Some(command) = try!(self.find_connection_by_token(token).readable()) {
+            match command {
+                ServerCommand::Hello { command_type, udp_port } => {
+                    // TODO setup server to broadcast at udp_port
+                    println!("session id {:?}: HELLO received; sending WELCOME, expecting \
+                              SET_STATION",
+                             token);
+                    let mut welcomebuf: Vec<u8> = vec![0; 3];
+                    unsafe {
+                        welcomebuf.set_len(3);
+                    }
+                    debug!("Station Count: {}", self.stations.len());
+                    BigEndian::write_u16(&mut welcomebuf[1..], self.stations.len() as u16);
+                    debug!("{:?}", welcomebuf);
+                    self.find_connection_by_token(token).send_message(Rc::new(welcomebuf.to_vec()));
+                }
+                ServerCommand::SetStation { command_type, station_number } => {
+                    let station_number = station_number as usize;
+                    if station_number >= self.stations.len() {
+                        println!("session id {:?}: received request for invalid station: {}, \
+                                  sending INVALID_COMMAND; closing connection",
+                                 token,
+                                 station_number);
 
-            let rc_message = Rc::new(message);
-            // Queue up a write for all connected clients.
-            for c in self.conns.iter_mut() {
-                c.send_message(rc_message.clone())
-                    .unwrap_or_else(|e| {
-                        error!("Failed to queue message for {:?}: {:?}", c.token, e);
-                        c.mark_reset();
-                    });
+                        let reply_string = "INVALID_COMMAND_REPLY: server received a SET_STATION \
+                                            command with an invalid station number"
+                            .to_string();
+                        let reply_string_size = reply_string.len();
+                        let mut invalidbuf: Vec<u8> = vec![0; 2];
+                        unsafe {
+                            invalidbuf.set_len(2);
+                        }
+                        invalidbuf[0] = 2; // reply_type
+                        invalidbuf[1] = reply_string_size as u8;
+                        let mut reply_string_vec = reply_string.into_bytes();
+                        debug!("vec: {:?}", reply_string_vec);
+                        invalidbuf.append(&mut reply_string_vec);
+                        debug!("invalid: {:?}", invalidbuf);
+                        self.find_connection_by_token(token)
+                            .send_message(Rc::new(invalidbuf.to_vec()));
+                        self.find_connection_by_token(token).mark_to_be_removed();
+                    } else {
+                        println!("session id {:?}: received SET_STATION to station {}",
+                                 token,
+                                 station_number);
+                        let song_name_size = self.stations[station_number].len();
+                        let mut announcebuf: Vec<u8> = vec![0; 2];
+                        unsafe {
+                            announcebuf.set_len(2);
+                        }
+                        announcebuf[0] = 1; // reply_type
+                        announcebuf[1] = song_name_size as u8;
+                        let song_name = self.stations[station_number].clone();
+                        debug!("song_name: {:?}", song_name);
+                        let mut song_name_vec = song_name.into_bytes();
+                        debug!("vec: {:?}", song_name_vec);
+                        announcebuf.append(&mut song_name_vec);
+                        debug!("announce: {:?}", announcebuf);
+                        self.find_connection_by_token(token)
+                            .send_message(Rc::new(announcebuf.to_vec()));
+                        debug!("Sending songname: {}",
+                               String::from_utf8(announcebuf[2..].to_vec()).unwrap());
+                    }
+                }
             }
         }
 
