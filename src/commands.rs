@@ -1,13 +1,10 @@
 // Client to Server Commands
-#[allow(dead_code)]
-pub struct Hello {
-    pub command_type: u8,
-    pub udp_port: u16,
-}
-#[allow(dead_code)]
-pub struct SetStation {
-    pub command_type: u8,
-    pub station_number: u16,
+pub enum ServerCommand {
+    Hello { command_type: u8, udp_port: u16 },
+    SetStation {
+        command_type: u8,
+        station_number: u16,
+    },
 }
 
 // Server to Client Replies

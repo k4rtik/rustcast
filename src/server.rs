@@ -1,6 +1,8 @@
 use std::io::{self, ErrorKind};
 use std::rc::Rc;
 
+use byteorder::{ByteOrder, BigEndian};
+use commands::*;
 use slab;
 use mio::*;
 use mio::tcp::*;
@@ -60,9 +62,6 @@ impl Server {
             // handle that the event is about) as well as information about
             // what kind of event occurred (readable, writable, signal, etc.)
             while i < cnt {
-                // TODO this would be nice if it would turn a Result type. trying to convert this
-                // into a io::Result runs into a problem because .ok_or() expects std::Result and
-                // not io::Result
                 let event = self.events.get(i).expect("Failed to get event");
 
                 trace!("event={:?}; idx={:?}", event, i);
@@ -184,6 +183,7 @@ impl Server {
     fn accept(&mut self, poll: &mut Poll) {
         debug!("server accepting new socket");
 
+        // XXX loop because we are not oneshot anymore, but how does this loop exit?
         loop {
             // Log an error if there is no socket, but otherwise move on so we do not tear down the
             // entire server.

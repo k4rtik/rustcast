@@ -4,6 +4,7 @@ use std::io::{Error, ErrorKind};
 use std::rc::Rc;
 
 use byteorder::{ByteOrder, BigEndian};
+use commands::*;
 
 use mio::*;
 use mio::tcp::*;
@@ -56,63 +57,50 @@ impl Connection {
     ///
     /// The Handler must continue calling until None is returned.
     ///
-    /// The recieve buffer is sent back to `Server` so the message can be broadcast to all
+    /// The receive buffer is sent back to `Server` so the message can be broadcast to all
     /// listening connections.
-    pub fn readable(&mut self) -> io::Result<Option<Vec<u8>>> {
+    pub fn readable(&mut self) -> io::Result<Option<ServerCommand>> {
+        self.read_message()
+    }
 
-        let msg_len = match try!(self.read_message_length()) {
-            None => {
-                return Ok(None);
+    fn read_message(&mut self) -> io::Result<Option<ServerCommand>> {
+        let mut buf = [0u8; 3];
+
+        let bytes = match self.sock.read(&mut buf) {
+            Ok(n) => n,
+            Err(e) => {
+                if e.kind() == ErrorKind::WouldBlock {
+                    return Ok(None);
+                } else {
+                    return Err(e);
+                }
             }
-            Some(n) => n,
         };
 
-        if msg_len == 0 {
-            debug!("message is zero bytes; token={:?}", self.token);
-            return Ok(None);
+        if bytes < 3 {
+            warn!("Found message length of {} bytes", bytes);
+            return Err(Error::new(ErrorKind::InvalidData, "Invalid message length"));
         }
 
-        let msg_len = msg_len as usize;
-
-        debug!("Expected message length is {}", msg_len);
-        let mut recv_buf: Vec<u8> = Vec::with_capacity(msg_len);
-        unsafe {
-            recv_buf.set_len(msg_len);
-        }
-
-        // UFCS: resolve "multiple applicable items in scope [E0034]" error
-        let sock_ref = <TcpStream as Read>::by_ref(&mut self.sock);
-
-        match sock_ref.take(msg_len as u64).read(&mut recv_buf) {
-            Ok(n) => {
-                debug!("CONN : we read {} bytes", n);
-
-                if n < msg_len as usize {
-                    return Err(Error::new(ErrorKind::InvalidData, "Did not read enough bytes"));
-                }
-
-                self.read_continuation = None;
-
-                Ok(Some(recv_buf.to_vec()))
-            }
-            Err(e) => {
-
-                if e.kind() == ErrorKind::WouldBlock {
-                    debug!("CONN : read encountered WouldBlock");
-
-                    // We are being forced to try again, but we already read the two bytes off of
-                    // the wire that determined the length. We need to store the message length so
-                    // we can resume next time we get readable.
-                    self.read_continuation = Some(msg_len as u64);
-                    Ok(None)
-                } else {
-                    error!("Failed to read buffer for token {:?}, error: {}",
-                           self.token,
-                           e);
-                    Err(e)
+        let command_type = buf[0];
+        let command_value = BigEndian::read_u16(&buf[1..]);
+        let command = match command_type {
+            0 => {
+                ServerCommand::Hello {
+                    command_type: command_type,
+                    udp_port: command_value,
                 }
             }
-        }
+            1 => {
+                ServerCommand::SetStation {
+                    command_type: command_type,
+                    station_number: command_value,
+                }
+            }
+            _ => unreachable!("InvalidCommand"), // TODO deal with it
+        };
+
+        Ok(Some(command))
     }
 
     fn read_message_length(&mut self) -> io::Result<Option<u64>> {

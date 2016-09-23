@@ -41,26 +41,19 @@ fn main() {
     let mut stream = TcpStream::connect((servername, serverport)).unwrap();
 
     let mut hellobuf = [0u8; 3];
-    let hello = Hello {
-        command_type: 0,
-        udp_port: udpport,
-    };
-    hellobuf[0] = hello.command_type;
-    BigEndian::write_u16(&mut hellobuf[1..], hello.udp_port);
+    BigEndian::write_u16(&mut hellobuf[1..], udpport);
     debug!("{:?}", hellobuf);
     stream.write_all(hellobuf.as_ref()).unwrap();
 
     let mut welcomebuf = [0u8; 3];
     stream.read_exact(&mut welcomebuf).unwrap();
-    let welcome = Welcome {
-        reply_type: welcomebuf[0],
-        num_stations: BigEndian::read_u16(&welcomebuf[1..]),
-    };
-    info!("{} {}", welcome.reply_type, welcome.num_stations);
+    let reply_type = welcomebuf[0];
+    let num_stations = BigEndian::read_u16(&welcomebuf[1..]);
+    info!("reply_type: {}, num_stations: {}", reply_type, num_stations);
 
     println!("Type in a number to set the station we're listening to to that number.");
     println!("Enter q or press CTRL+C to quit.");
-    println!("> The server has {} stations.", welcome.num_stations);
+    println!("> The server has {} stations.", num_stations);
 
     loop {
         print!("> ");
@@ -86,12 +79,8 @@ fn main() {
                         };
 
                         let mut setstationbuf = [0u8; 3];
-                        let setstation = SetStation {
-                            command_type: 1,
-                            station_number: station,
-                        };
-                        setstationbuf[0] = setstation.command_type;
-                        BigEndian::write_u16(&mut setstationbuf[1..], setstation.station_number);
+                        setstationbuf[0] = 1;
+                        BigEndian::write_u16(&mut setstationbuf[1..], station);
                         debug!("{:?}", setstationbuf);
                         stream.write_all(setstationbuf.as_ref()).unwrap();
 
