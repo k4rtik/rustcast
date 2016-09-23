@@ -31,6 +31,8 @@ pub struct Connection {
     // track whether a connection is reset
     is_reset: bool,
 
+    is_to_be_removed: bool,
+
     // track whether a read received `WouldBlock` and store the number of
     // byte we are supposed to read
     read_continuation: Option<u64>,
@@ -48,6 +50,7 @@ impl Connection {
             send_queue: Vec::new(),
             is_idle: true,
             is_reset: false,
+            is_to_be_removed: false,
             read_continuation: None,
             write_continuation: false,
         }
@@ -181,6 +184,11 @@ impl Connection {
             self.interest.remove(Ready::writable());
         }
 
+        if self.is_to_be_removed() {
+            debug!("Marking for reset: {:?}", self.token);
+            self.mark_reset();
+        }
+
         Ok(())
     }
 
@@ -288,5 +296,16 @@ impl Connection {
     #[inline]
     pub fn is_idle(&self) -> bool {
         self.is_idle
+    }
+
+    pub fn mark_to_be_removed(&mut self) {
+        trace!("connection mark_to_be_removed; token={:?}", self.token);
+
+        self.is_to_be_removed = true;
+    }
+
+    #[inline]
+    pub fn is_to_be_removed(&self) -> bool {
+        self.is_to_be_removed
     }
 }
