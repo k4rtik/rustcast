@@ -10,7 +10,7 @@ use clap::{App, Arg};
 use std::io;
 use std::io::prelude::*;
 use std::net::TcpStream;
-
+use std::time::Duration;
 
 fn main() {
     env_logger::init().ok().expect("Failed to initialize logger");
@@ -36,6 +36,7 @@ fn main() {
     debug!("udp port: {}", udpport);
 
     let mut stream = TcpStream::connect((servername, serverport)).unwrap();
+    stream.set_read_timeout(Some(Duration::from_millis(100)));
 
     let mut hellobuf = [0u8; 3];
     BigEndian::write_u16(&mut hellobuf[1..], udpport);

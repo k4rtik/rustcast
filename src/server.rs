@@ -1,5 +1,6 @@
 use std::io::{self, ErrorKind};
 use std::rc::Rc;
+use std::time::Duration;
 
 use byteorder::{ByteOrder, BigEndian};
 use commands::*;
@@ -55,7 +56,7 @@ impl Server {
 
         info!("Server run loop starting...");
         loop {
-            let cnt = try!(poll.poll(&mut self.events, None));
+            let cnt = try!(poll.poll(&mut self.events, Some(Duration::from_millis(100))));
 
             let mut i = 0;
 
