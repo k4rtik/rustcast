@@ -32,13 +32,6 @@ pub struct Connection {
     is_reset: bool,
 
     is_to_be_removed: bool,
-
-    // track whether a read received `WouldBlock` and store the number of
-    // byte we are supposed to read
-    read_continuation: Option<u64>,
-
-    // track whether a write received `WouldBlock`
-    write_continuation: bool,
 }
 
 impl Connection {
@@ -51,8 +44,6 @@ impl Connection {
             is_idle: true,
             is_reset: false,
             is_to_be_removed: false,
-            read_continuation: None,
-            write_continuation: false,
         }
     }
 
@@ -106,33 +97,6 @@ impl Connection {
         Ok(Some(command))
     }
 
-    fn read_message_length(&mut self) -> io::Result<Option<u64>> {
-        if let Some(n) = self.read_continuation {
-            return Ok(Some(n));
-        }
-
-        let mut buf = [0u8; 8];
-
-        let bytes = match self.sock.read(&mut buf) {
-            Ok(n) => n,
-            Err(e) => {
-                if e.kind() == ErrorKind::WouldBlock {
-                    return Ok(None);
-                } else {
-                    return Err(e);
-                }
-            }
-        };
-
-        if bytes < 8 {
-            warn!("Found message length of {} bytes", bytes);
-            return Err(Error::new(ErrorKind::InvalidData, "Invalid message length"));
-        }
-
-        let msg_len = BigEndian::read_u64(buf.as_ref());
-        Ok(Some(msg_len))
-    }
-
     /// Handle a writable event from the poller.
     ///
     /// Send one message from the send queue to the client. If the queue is empty, remove interest
@@ -149,7 +113,6 @@ impl Connection {
                 match self.sock.write(&*buf) {
                     Ok(n) => {
                         debug!("CONN : we wrote {} bytes", n);
-                        self.write_continuation = false;
                         Ok(())
                     }
                     Err(e) => {
@@ -158,7 +121,6 @@ impl Connection {
 
                             // put message back into the queue so we can try again
                             self.send_queue.push(buf);
-                            self.write_continuation = true;
                             Ok(())
                         } else {
                             error!("Failed to send buffer for {:?}, error: {}", self.token, e);
@@ -178,33 +140,6 @@ impl Connection {
         }
 
         Ok(())
-    }
-
-    fn write_message_length(&mut self, buf: &Rc<Vec<u8>>) -> io::Result<Option<()>> {
-        if self.write_continuation {
-            return Ok(Some(()));
-        }
-
-        let len = buf.len();
-        let mut send_buf = [0u8; 8];
-        BigEndian::write_u64(&mut send_buf, len as u64);
-
-        match self.sock.write(&send_buf) {
-            Ok(n) => {
-                debug!("Sent message length of {} bytes", n);
-                Ok(Some(()))
-            }
-            Err(e) => {
-                if e.kind() == ErrorKind::WouldBlock {
-                    debug!("client flushing buf; WouldBlock");
-
-                    Ok(None)
-                } else {
-                    error!("Failed to send buffer for {:?}, error: {}", self.token, e);
-                    Err(e)
-                }
-            }
-        }
     }
 
     /// Queue an outgoing message to the client.

@@ -5,11 +5,8 @@ extern crate clap;
 extern crate log;
 extern crate env_logger;
 
-mod commands;
-
 use byteorder::{ByteOrder, BigEndian};
 use clap::{App, Arg};
-use commands::*;
 use std::io;
 use std::io::prelude::*;
 use std::net::TcpStream;

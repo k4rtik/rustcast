@@ -244,7 +244,8 @@ impl Server {
         // let rc_message = Rc::new::<Vec<u8>();
         while let Some(command) = try!(self.find_connection_by_token(token).readable()) {
             match command {
-                ServerCommand::Hello { command_type, udp_port } => {
+                ServerCommand::Hello { udp_port, .. } => {
+                    info!("udp_port: {}", udp_port);
                     // TODO setup server to broadcast at udp_port
                     println!("session id {:?}: HELLO received; sending WELCOME, expecting \
                               SET_STATION",
@@ -256,9 +257,11 @@ impl Server {
                     debug!("Station Count: {}", self.stations.len());
                     BigEndian::write_u16(&mut welcomebuf[1..], self.stations.len() as u16);
                     debug!("{:?}", welcomebuf);
-                    self.find_connection_by_token(token).send_message(Rc::new(welcomebuf.to_vec()));
+                    self.find_connection_by_token(token)
+                        .send_message(Rc::new(welcomebuf.to_vec()))
+                        .ok();
                 }
-                ServerCommand::SetStation { command_type, station_number } => {
+                ServerCommand::SetStation { station_number, .. } => {
                     let station_number = station_number as usize;
                     if station_number >= self.stations.len() {
                         println!("session id {:?}: received request for invalid station: {}, \
@@ -281,7 +284,8 @@ impl Server {
                         invalidbuf.append(&mut reply_string_vec);
                         debug!("invalid: {:?}", invalidbuf);
                         self.find_connection_by_token(token)
-                            .send_message(Rc::new(invalidbuf.to_vec()));
+                            .send_message(Rc::new(invalidbuf.to_vec()))
+                            .ok();
                         self.find_connection_by_token(token).mark_to_be_removed();
                     } else {
                         println!("session id {:?}: received SET_STATION to station {}",
@@ -301,7 +305,8 @@ impl Server {
                         announcebuf.append(&mut song_name_vec);
                         debug!("announce: {:?}", announcebuf);
                         self.find_connection_by_token(token)
-                            .send_message(Rc::new(announcebuf.to_vec()));
+                            .send_message(Rc::new(announcebuf.to_vec()))
+                            .ok();
                         debug!("Sending songname: {}",
                                String::from_utf8(announcebuf[2..].to_vec()).unwrap());
                     }
