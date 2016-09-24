@@ -5,6 +5,9 @@ use std::time::Duration;
 use std::sync::mpsc;
 use std::sync::mpsc::{Sender, Receiver};
 use std::thread;
+use std::fs::File;
+use std::io::{Read, BufReader};
+use std::net::{SocketAddr, Ipv4Addr};
 
 use byteorder::{ByteOrder, BigEndian};
 use commands::*;
@@ -16,9 +19,11 @@ use connection::Connection;
 
 type Slab<T> = slab::Slab<T, Token>;
 
+type UdpAddress = (Ipv4Addr, u16);
+
 enum Action {
-    Add(u16),
-    Remove(u16),
+    Add(UdpAddress),
+    Remove(UdpAddress),
 }
 
 pub struct Server {
@@ -41,18 +46,19 @@ pub struct Server {
 }
 
 fn broadcast_channel(rx: Receiver<Action>, filename: String) {
-    let mut recipients = HashSet::<u16>::new();
+    let mut recipients = HashSet::<UdpAddress>::new();
+    let mut f = File::open(filename).unwrap(); // XXX or panic!
     loop {
         match rx.try_recv() {
             Ok(action) => {
                 match action {
-                    Action::Add(port) => {
-                        debug!("adding: {}", port);
-                        recipients.insert(port);
+                    Action::Add(udpaddress) => {
+                        debug!("adding: {:?}", udpaddress);
+                        recipients.insert(udpaddress);
                     }
-                    Action::Remove(port) => {
-                        debug!("removing: {}", port);
-                        recipients.remove(&port);
+                    Action::Remove(udpaddress) => {
+                        debug!("removing: {:?}", udpaddress);
+                        recipients.remove(&udpaddress);
                     }
                 }
             }
@@ -62,7 +68,8 @@ fn broadcast_channel(rx: Receiver<Action>, filename: String) {
         };
         // TODO read portion of file
         for recipient in &recipients {
-            debug!("rec: {}", recipient);
+            debug!("rec: {:?}", recipient);
+
         }
         thread::sleep(Duration::new(3, 0));
     }
@@ -162,10 +169,11 @@ impl Server {
         for token in reset_tokens {
             let currentChannel = self.find_connection_by_token(token)
                 .get_current_channel() as usize;
+            let ip = self.find_connection_by_token(token).get_addr();
             let udp_port = self.find_connection_by_token(token).get_udp_port();
             if currentChannel < self.channels.len() {
                 debug!("sending message to remove port: {}", udp_port);
-                self.channels[currentChannel].send(Action::Remove(udp_port));
+                self.channels[currentChannel].send(Action::Remove((ip, udp_port)));
             }
 
             match self.conns.remove(token) {
@@ -252,8 +260,8 @@ impl Server {
         loop {
             // Log an error if there is no socket, but otherwise move on so we do not tear down the
             // entire server.
-            let sock = match self.sock.accept() {
-                Ok((sock, _)) => sock,
+            let (sock, ip) = match self.sock.accept() {
+                Ok((sock, SocketAddr::V4(ip))) => (sock, ip),
                 Err(e) => {
                     if e.kind() == ErrorKind::WouldBlock {
                         debug!("accept encountered WouldBlock");
@@ -262,12 +270,16 @@ impl Server {
                     }
                     return;
                 }
+                _ => {
+                    error!("IPv6 not supported");
+                    return;
+                }
             };
-
+            // let SocketAddr::V4(ip) = addr;
             let token = match self.conns.vacant_entry() {
                 Some(entry) => {
                     debug!("registering {:?} with poller", entry.index());
-                    let c = Connection::new(sock, entry.index());
+                    let c = Connection::new(sock, entry.index(), ip.ip().clone());
                     entry.insert(c).index()
                 }
                 None => {
@@ -361,12 +373,14 @@ impl Server {
 
                         let currentChannel = self.find_connection_by_token(token)
                             .get_current_channel();
+                        let ip = self.find_connection_by_token(token).get_addr();
                         let udp_port = self.find_connection_by_token(token).get_udp_port();
                         if currentChannel < self.stations.len() as u16 {
                             debug!("sending message to remove port: {}", udp_port);
-                            self.channels[currentChannel as usize].send(Action::Remove(udp_port));
+                            self.channels[currentChannel as usize]
+                                .send(Action::Remove((ip, udp_port)));
                         }
-                        self.channels[station_number].send(Action::Add(udp_port));
+                        self.channels[station_number].send(Action::Add((ip, udp_port)));
                         self.find_connection_by_token(token)
                             .set_current_channel(station_number as u16);
 

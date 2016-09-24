@@ -2,6 +2,7 @@ use std::io;
 use std::io::prelude::*;
 use std::io::{Error, ErrorKind};
 use std::rc::Rc;
+use std::net::Ipv4Addr;
 
 use byteorder::{ByteOrder, BigEndian};
 use commands::*;
@@ -38,10 +39,12 @@ pub struct Connection {
     currentChannel: u16,
 
     udp_port: u16,
+
+    addr: Ipv4Addr,
 }
 
 impl Connection {
-    pub fn new(sock: TcpStream, token: Token) -> Connection {
+    pub fn new(sock: TcpStream, token: Token, addr: Ipv4Addr) -> Connection {
         Connection {
             sock: sock,
             token: token,
@@ -53,6 +56,7 @@ impl Connection {
             handshake_done: false,
             currentChannel: 65535,
             udp_port: 0,
+            addr: addr,
         }
     }
 
@@ -271,5 +275,10 @@ impl Connection {
     #[inline]
     pub fn get_udp_port(&self) -> u16 {
         self.udp_port
+    }
+
+    #[inline]
+    pub fn get_addr(&self) -> Ipv4Addr {
+        self.addr
     }
 }
