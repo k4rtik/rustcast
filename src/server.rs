@@ -167,13 +167,13 @@ impl Server {
         }
 
         for token in reset_tokens {
-            let currentChannel = self.find_connection_by_token(token)
+            let current_channel = self.find_connection_by_token(token)
                 .get_current_channel() as usize;
             let ip = self.find_connection_by_token(token).get_addr();
             let udp_port = self.find_connection_by_token(token).get_udp_port();
-            if currentChannel < self.channels.len() {
+            if current_channel < self.channels.len() {
                 debug!("sending message to remove port: {}", udp_port);
-                self.channels[currentChannel].send(Action::Remove((ip, udp_port)));
+                self.channels[current_channel].send(Action::Remove((ip, udp_port))).unwrap();
             }
 
             match self.conns.remove(token) {
@@ -371,16 +371,17 @@ impl Server {
                                  token,
                                  station_number);
 
-                        let currentChannel = self.find_connection_by_token(token)
+                        let current_channel = self.find_connection_by_token(token)
                             .get_current_channel();
                         let ip = self.find_connection_by_token(token).get_addr();
                         let udp_port = self.find_connection_by_token(token).get_udp_port();
-                        if currentChannel < self.stations.len() as u16 {
+                        if current_channel < self.stations.len() as u16 {
                             debug!("sending message to remove port: {}", udp_port);
-                            self.channels[currentChannel as usize]
-                                .send(Action::Remove((ip, udp_port)));
+                            self.channels[current_channel as usize]
+                                .send(Action::Remove((ip, udp_port)))
+                                .unwrap();
                         }
-                        self.channels[station_number].send(Action::Add((ip, udp_port)));
+                        self.channels[station_number].send(Action::Add((ip, udp_port))).unwrap();
                         self.find_connection_by_token(token)
                             .set_current_channel(station_number as u16);
 

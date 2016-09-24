@@ -36,7 +36,7 @@ pub struct Connection {
 
     handshake_done: bool,
 
-    currentChannel: u16,
+    current_channel: u16,
 
     udp_port: u16,
 
@@ -54,7 +54,7 @@ impl Connection {
             is_reset: false,
             is_to_be_removed: false,
             handshake_done: false,
-            currentChannel: 65535,
+            current_channel: 65535,
             udp_port: 0,
             addr: addr,
         }
@@ -260,12 +260,12 @@ impl Connection {
     }
 
     pub fn set_current_channel(&mut self, channel: u16) {
-        self.currentChannel = channel;
+        self.current_channel = channel;
     }
 
     #[inline]
     pub fn get_current_channel(&self) -> u16 {
-        self.currentChannel
+        self.current_channel
     }
 
     pub fn set_udp_port(&mut self, port: u16) {
