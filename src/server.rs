@@ -6,14 +6,16 @@ use std::sync::mpsc;
 use std::sync::mpsc::{Sender, Receiver};
 use std::thread;
 use std::fs::File;
-use std::io::{Read, BufReader};
-use std::net::{SocketAddr, Ipv4Addr};
+use std::io::Read;
+use std::net::{SocketAddr, IpAddr, Ipv4Addr};
+use std::io::{Seek, SeekFrom};
 
 use byteorder::{ByteOrder, BigEndian};
 use commands::*;
 use slab;
 use mio::*;
 use mio::tcp::*;
+use mio::udp::*;
 
 use connection::Connection;
 
@@ -48,6 +50,11 @@ pub struct Server {
 fn broadcast_channel(rx: Receiver<Action>, filename: String) {
     let mut recipients = HashSet::<UdpAddress>::new();
     let mut f = File::open(filename).unwrap(); // XXX or panic!
+    let addr = ("0.0.0.0:".to_string() + "0")
+        .parse::<SocketAddr>()
+        .unwrap();
+
+    let sock = UdpSocket::bind(&addr).unwrap();
     loop {
         match rx.try_recv() {
             Ok(action) => {
@@ -66,12 +73,26 @@ fn broadcast_channel(rx: Receiver<Action>, filename: String) {
             // Err(mpsc::TryRecvError::Empty) => 65535,
             // Err(mpsc::TryRecvError::Disconnected) => return,
         };
-        // TODO read portion of file
+
+        let mut buffer = [0; 1024];
+        let len = match f.read(&mut buffer[..]) {
+            Ok(0) => {
+                f.seek(SeekFrom::Start(0)).unwrap();
+                0
+            }
+            Ok(n) => n,
+            _ => {
+                println!("Error reading file!");
+                return;
+            }
+        };
+
         for recipient in &recipients {
             debug!("rec: {:?}", recipient);
-
+            let dest = SocketAddr::new(IpAddr::V4(recipient.0), recipient.1);
+            sock.send_to(&buffer[0..len], &dest).unwrap();
         }
-        thread::sleep(Duration::new(3, 0));
+        thread::sleep(Duration::new(0, 62_500_000));
     }
 }
 

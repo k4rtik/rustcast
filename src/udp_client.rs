@@ -25,11 +25,8 @@ fn main() {
     let socket = UdpSocket::bind(("0.0.0.0", port)).unwrap();
 
     loop {
-        // TODO find out optimal buffer window to read
-        let mut buf = [0u8; 1400];
+        let mut buf = [0u8; 2048]; // unsure if this should match the server buffer size
         let (amt, _) = socket.recv_from(&mut buf).unwrap();
-        // TODO do I need a timeout here?
-
         io::stdout().write(&buf[0..amt]).unwrap();
     }
 }
