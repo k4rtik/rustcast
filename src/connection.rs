@@ -34,6 +34,10 @@ pub struct Connection {
     is_to_be_removed: bool,
 
     handshake_done: bool,
+
+    currentChannel: u16,
+
+    udp_port: u16,
 }
 
 impl Connection {
@@ -47,6 +51,8 @@ impl Connection {
             is_reset: false,
             is_to_be_removed: false,
             handshake_done: false,
+            currentChannel: 65535,
+            udp_port: 0,
         }
     }
 
@@ -109,8 +115,6 @@ impl Connection {
     ///
     /// Send one message from the send queue to the client. If the queue is empty, remove interest
     /// in write events.
-    /// TODO: Figure out if sending more than one message is optimal. Maybe we should be trying to
-    /// flush until the kernel sends back EAGAIN?
     pub fn writable(&mut self) -> io::Result<()> {
 
         try!(self.send_queue
@@ -249,5 +253,23 @@ impl Connection {
     #[inline]
     pub fn is_handshake_done(&self) -> bool {
         self.handshake_done
+    }
+
+    pub fn set_current_channel(&mut self, channel: u16) {
+        self.currentChannel = channel;
+    }
+
+    #[inline]
+    pub fn get_current_channel(&self) -> u16 {
+        self.currentChannel
+    }
+
+    pub fn set_udp_port(&mut self, port: u16) {
+        self.udp_port = port;
+    }
+
+    #[inline]
+    pub fn get_udp_port(&self) -> u16 {
+        self.udp_port
     }
 }

@@ -1,6 +1,10 @@
+use std::collections::HashSet;
 use std::io::{self, ErrorKind};
 use std::rc::Rc;
 use std::time::Duration;
+use std::sync::mpsc;
+use std::sync::mpsc::{Sender, Receiver};
+use std::thread;
 
 use byteorder::{ByteOrder, BigEndian};
 use commands::*;
@@ -11,6 +15,11 @@ use mio::tcp::*;
 use connection::Connection;
 
 type Slab<T> = slab::Slab<T, Token>;
+
+enum Action {
+    Add(u16),
+    Remove(u16),
+}
 
 pub struct Server {
     // main socket for our server
@@ -27,10 +36,48 @@ pub struct Server {
 
     // available stations on this server
     stations: Vec<String>,
+
+    channels: Vec<Sender<Action>>,
+}
+
+fn broadcast_channel(rx: Receiver<Action>, filename: String) {
+    let mut recipients = HashSet::<u16>::new();
+    loop {
+        match rx.try_recv() {
+            Ok(action) => {
+                match action {
+                    Action::Add(port) => {
+                        debug!("adding: {}", port);
+                        recipients.insert(port);
+                    }
+                    Action::Remove(port) => {
+                        debug!("removing: {}", port);
+                        recipients.remove(&port);
+                    }
+                }
+            }
+            Err(_) => (),
+            // Err(mpsc::TryRecvError::Empty) => 65535,
+            // Err(mpsc::TryRecvError::Disconnected) => return,
+        };
+        // TODO read portion of file
+        for recipient in &recipients {
+            debug!("rec: {}", recipient);
+        }
+        thread::sleep(Duration::new(3, 0));
+    }
 }
 
 impl Server {
     pub fn new(sock: TcpListener, stations: Vec<String>) -> Server {
+        let mut channels = Vec::<Sender<Action>>::new();
+        for i in 0..stations.len() {
+            let station = stations[i].clone();
+            let (tx, rx): (Sender<Action>, Receiver<Action>) = mpsc::channel();
+            thread::spawn(move || broadcast_channel(rx, station));
+            channels.push(tx);
+        }
+
         Server {
             sock: sock,
 
@@ -47,6 +94,8 @@ impl Server {
 
             // vector of available stations on this server
             stations: stations,
+
+            channels: channels,
         }
     }
 
@@ -60,9 +109,9 @@ impl Server {
 
             let mut i = 0;
 
-            trace!("processing events... cnt={}; len={}",
-                   cnt,
-                   self.events.len());
+            // trace!("processing events... cnt={}; len={}",
+            //        cnt,
+            //        self.events.len());
 
             // Iterate over the notifications. Each event provides the token
             // it was registered with (which usually represents, at least, the
@@ -93,7 +142,7 @@ impl Server {
     }
 
     fn tick(&mut self, poll: &mut Poll) {
-        trace!("Handling end of tick");
+        // trace!("Handling end of tick");
 
         let mut reset_tokens = Vec::new();
 
@@ -111,6 +160,14 @@ impl Server {
         }
 
         for token in reset_tokens {
+            let currentChannel = self.find_connection_by_token(token)
+                .get_current_channel() as usize;
+            let udp_port = self.find_connection_by_token(token).get_udp_port();
+            if currentChannel < self.channels.len() {
+                debug!("sending message to remove port: {}", udp_port);
+                self.channels[currentChannel].send(Action::Remove(udp_port));
+            }
+
             match self.conns.remove(token) {
                 Some(_c) => {
                     debug!("reset connection; token={:?}", token);
@@ -270,7 +327,7 @@ impl Server {
                                                              "Handshake already done but server \
                                                               re-received HELLO");
                     } else {
-                        // TODO setup server to broadcast at udp_port
+                        self.find_connection_by_token(token).set_udp_port(udp_port);
                         println!("{:?}: HELLO received; sending WELCOME, expecting SET_STATION",
                                  token);
                         let mut welcomebuf: Vec<u8> = vec![0; 3];
@@ -301,6 +358,18 @@ impl Server {
                         println!("{:?}: received SET_STATION to station {}",
                                  token,
                                  station_number);
+
+                        let currentChannel = self.find_connection_by_token(token)
+                            .get_current_channel();
+                        let udp_port = self.find_connection_by_token(token).get_udp_port();
+                        if currentChannel < self.stations.len() as u16 {
+                            debug!("sending message to remove port: {}", udp_port);
+                            self.channels[currentChannel as usize].send(Action::Remove(udp_port));
+                        }
+                        self.channels[station_number].send(Action::Add(udp_port));
+                        self.find_connection_by_token(token)
+                            .set_current_channel(station_number as u16);
+
                         let song_name_size = self.stations[station_number].len();
                         let mut announcebuf: Vec<u8> = vec![0; 2];
                         unsafe {
