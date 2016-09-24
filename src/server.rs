@@ -92,7 +92,7 @@ fn broadcast_channel(rx: Receiver<Action>, filename: String) {
             let dest = SocketAddr::new(IpAddr::V4(recipient.0), recipient.1);
             sock.send_to(&buffer[0..len], &dest).unwrap();
         }
-        thread::sleep(Duration::new(0, 62_500_000));
+        thread::sleep(Duration::new(0, 62_500_000)); // 62.5ms
     }
 }
 
