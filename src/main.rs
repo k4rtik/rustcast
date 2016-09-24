@@ -41,7 +41,7 @@ fn main() {
     let serverport = matches.value_of("tcpport").unwrap();
     debug!("server port: {}", serverport);
 
-    let addr = ("127.0.0.1:".to_string() + serverport)
+    let addr = ("0.0.0.0:".to_string() + serverport)
         .parse::<SocketAddr>()
         .ok()
         .expect("Failed to parse host:port string");
