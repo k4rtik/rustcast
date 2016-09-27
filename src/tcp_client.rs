@@ -18,7 +18,7 @@ use std::thread;
 fn main() {
     env_logger::init().ok().expect("Failed to initialize logger");
 
-    let matches = App::new("snowcast_control")
+    let matches = App::new("rustcast_control")
         .version("0.1.0")
         .arg(Arg::with_name("servername")
             .required(true)

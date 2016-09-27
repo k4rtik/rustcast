@@ -1,5 +1,5 @@
 [package]
-name = "snowcast"
+name = "rustcast"
 version = "0.1.0"
 authors = ["Kartik Singhal <kartiksinghal@gmail.com>"]
 
@@ -15,13 +15,13 @@ version = "2"
 default-features = false
 
 [[bin]]
-name = "snowcast_server"
+name = "rustcast_server"
 path = "src/main.rs"
 
 [[bin]]
-name = "snowcast_listener"
+name = "rustcast_listener"
 path = "src/udp_client.rs"
 
 [[bin]]
-name = "snowcast_control"
+name = "rustcast_control"
 path = "src/tcp_client.rs"

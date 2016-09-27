@@ -11,7 +11,7 @@ use std::io::{self, Write};
 fn main() {
     env_logger::init().ok().expect("Failed to initialize logger");
 
-    let matches = App::new("snowcast_listener")
+    let matches = App::new("rustcast_listener")
         .version("0.1.0")
         .arg(Arg::with_name("udpport")
             .required(true)

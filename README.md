@@ -1,11 +1,13 @@
-# snowcast
+# Rustcast
+
+A simple Internet Radio Station.
 
 ## Design Decisions
 - Programming Language: Rust
-- Server Design Model -- Async IO based using `mio` library
+- Server Design Model -- Async IO based using [`mio` library](https://github.com/carllerche/mio)
 - I spawn OS threads for each station and communicate to those threads from my server (event loop/`poll` in the code) using Rust channels. Each station thread is responsible for streaming a single mp3 to a set of UDP clients.
 - I depend on the `mio` poll mechanism to handle multiple clients.
-- I have used the Rust standard library networking APIs in both of the clients, ie, no dependence on `mio` in those two programs.
+- I have used the Rust [standard library networking APIs](https://doc.rust-lang.org/std/net/) in both of the clients, ie, no dependence on `mio` in those two programs.
 
 ## Known Bugs / Missing Functionality
 - The server currently doesn't send announces for change of songs. I could have added it using another dedicated channel which would create another `send_message` for the relevant `connection` (I just ran out of time by the time I noticed this was missing). However, the TCP client is capable of handling simultaneous input from server and user as I use threads there as well.
