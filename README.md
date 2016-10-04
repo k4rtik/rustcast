@@ -1,6 +1,6 @@
 # Rustcast
 
-A simple Internet Radio Station.
+A simple Internet Radio Station (based on [this project design](http://cs.brown.edu/courses/csci1680/f16/content/projects/snowcast.pdf)).
 
 ## Design Decisions
 - Programming Language: Rust
